@@ -49,14 +49,7 @@ namespace timed_executor
 
       if (get_next_executable(any_executable))
       {
-        if (any_executable.subscription)
-        {
-          execute_subscription(any_executable);
-        }
-        else
-        {
-          execute_any_executable(any_executable);
-        }
+        execute_any_executable(any_executable);
         // make sure memory_strategy_ is an instance of PriorityMemoryStrategy
         if (prio_memory_strategy_!=nullptr)
         {
@@ -72,100 +65,6 @@ namespace timed_executor
     return maxRuntime;
   }
 
-  void
-  TimedExecutor::execute_subscription(rclcpp::AnyExecutable executable)
-  {
-    rclcpp::SubscriptionBase::SharedPtr subscription = executable.subscription;
-
-    rclcpp::MessageInfo message_info;
-    message_info.get_rmw_message_info().from_intra_process = false;
-
-    if (subscription->is_serialized())
-    {
-      // This is the case where a copy of the serialized message is taken from
-      // the middleware via inter-process communication.
-
-      // if this should happen on another thread,  we'd pass it to a thread here
-      std::shared_ptr<rclcpp::SerializedMessage> serialized_msg = subscription->create_serialized_message();
-      take_and_do_error_handling(
-          "taking a serialized message from topic",
-          subscription->get_topic_name(),
-          [&]()
-          {
-            auto result = subscription->take_serialized(*serialized_msg.get(), message_info);
-            // RCLCPP_INFO(rclcpp::get_logger(this->name), "at topic %s, serialized msg sent at %ld, and recieved at %ld", executable.node_base->get_name(), message_info.get_rmw_message_info().source_timestamp, message_info.get_rmw_message_info().received_timestamp);
-            return result;
-          },
-          [&]()
-          {
-            auto void_serialized_msg = std::static_pointer_cast<void>(serialized_msg);
-            subscription->handle_message(void_serialized_msg, message_info);
-          });
-      subscription->return_serialized_message(serialized_msg);
-    }
-    else if (subscription->can_loan_messages())
-    {
-      // This is the case where a loaned message is taken from the middleware via
-      // inter-process communication, given to the user for their callback,
-      // and then returned.
-      void *loaned_msg = nullptr;
-      // TODO(wjwwood): refactor this into methods on subscription when LoanedMessage
-      //   is extened to support subscriptions as well.
-      take_and_do_error_handling(
-          "taking a loaned message from topic",
-          subscription->get_topic_name(),
-          [&]()
-          {
-            rcl_ret_t ret = rcl_take_loaned_message(
-                subscription->get_subscription_handle().get(),
-                &loaned_msg,
-                &message_info.get_rmw_message_info(),
-                nullptr);
-            if (RCL_RET_SUBSCRIPTION_TAKE_FAILED == ret)
-            {
-              return false;
-            }
-            else if (RCL_RET_OK != ret)
-            {
-              rclcpp::exceptions::throw_from_rcl_error(ret);
-            }
-            // RCLCPP_INFO(rclcpp::get_logger(this->name), "at topic %s, loaned msg sent at %ld, and recieved at %ld", executable.node_base->get_name(), message_info.get_rmw_message_info().source_timestamp, message_info.get_rmw_message_info().received_timestamp);
-            return true;
-          },
-          [&]()
-          { subscription->handle_loaned_message(loaned_msg, message_info); });
-      rcl_ret_t ret = rcl_return_loaned_message_from_subscription(
-          subscription->get_subscription_handle().get(),
-          loaned_msg);
-      if (RCL_RET_OK != ret)
-      {
-        RCLCPP_ERROR(
-            rclcpp::get_logger("rclcpp"),
-            "rcl_return_loaned_message_from_subscription() failed for subscription on topic '%s': %s",
-            subscription->get_topic_name(), rcl_get_error_string().str);
-      }
-      loaned_msg = nullptr;
-    }
-    else
-    {
-      // This case is taking a copy of the message data from the middleware via
-      // inter-process communication.
-      std::shared_ptr<void> message = subscription->create_message();
-      take_and_do_error_handling(
-          "taking a message from topic",
-          subscription->get_topic_name(),
-          [&]()
-          {
-            auto result = subscription->take_type_erased(message.get(), message_info);
-            // RCLCPP_INFO(rclcpp::get_logger(this->name), "at topic %s, IPC msg sent at %ld, and recieved at %ld", executable.node_base->get_name(), message_info.get_rmw_message_info().source_timestamp, message_info.get_rmw_message_info().received_timestamp);
-            return result;
-          },
-          [&]()
-          { subscription->handle_message(message, message_info); });
-      // this just deallocates
-      subscription->return_message(message);
-    }
-  }
   bool TimedExecutor::get_next_executable(rclcpp::AnyExecutable &any_executable, std::chrono::nanoseconds timeout)
   {
     bool success = false;
