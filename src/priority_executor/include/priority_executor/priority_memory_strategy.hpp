@@ -19,6 +19,7 @@
 #include <vector>
 #include <queue>
 #include <time.h>
+#include <set>
 
 #include "rcl/allocator.h"
 
@@ -51,10 +52,10 @@ enum ExecutableType
 
 enum ExecutableScheduleType
 {
-    CHAIN_INDEPENDENT_PRIORITY, // not used here
+    DEADLINE = 0,
     CHAIN_AWARE_PRIORITY,
-    DEADLINE,
-    DEFAULT, // not used here
+    CHAIN_INDEPENDENT_PRIORITY, // not used here
+    DEFAULT,                    // not used here
 };
 
 class PriorityExecutable
@@ -62,7 +63,7 @@ class PriorityExecutable
 public:
     std::shared_ptr<const void> handle;
     ExecutableType type;
-    bool can_be_run = true;
+    bool can_be_run = false;
     std::shared_ptr<rclcpp::Waitable> waitable;
     ExecutableScheduleType sched_type;
 
@@ -89,6 +90,11 @@ public:
     PriorityExecutable();
 
     void increment_counter();
+
+    bool operator==(const PriorityExecutable &other) const;
+
+    static size_t num_executables;
+    int executable_id = 0;
 };
 
 class PriorityExecutableComparator
@@ -138,7 +144,10 @@ public:
         rclcpp::AnyExecutable &any_exec,
         const WeakNodeList &weak_nodes);
 
-    void post_execute(rclcpp::AnyExecutable any_exec);
+    /**
+     * thread-id is used for logging. if -1, then don't log the thread id
+     */
+    void post_execute(rclcpp::AnyExecutable any_exec, int thread_id = -1);
 
     void
     get_next_subscription(
@@ -161,12 +170,12 @@ public:
     void
     get_next_waitable(rclcpp::AnyExecutable &any_exec, const WeakNodeList &weak_nodes) override;
 
-    PriorityExecutable *get_priority_settings(std::shared_ptr<const void> executable)
+    std::shared_ptr<PriorityExecutable> get_priority_settings(std::shared_ptr<const void> executable)
     {
         auto search = priority_map.find(executable);
         if (search != priority_map.end())
         {
-            return &(search->second);
+            return search->second;
         }
         else
         {
@@ -248,23 +257,20 @@ public:
     void set_executable_priority(std::shared_ptr<const void> handle, int priority, ExecutableType t)
     {
         // TODO: any sanity checks should go here
-        // priority_map.insert(executable, priority);
-        priority_map[handle] = PriorityExecutable(handle, priority, t);
+        priority_map[handle] = std::make_shared<PriorityExecutable>(handle, priority, t);
     }
     void set_executable_priority(std::shared_ptr<const void> handle, int priority, ExecutableType t, ExecutableScheduleType sc, int chain_index)
     {
         // TODO: any sanity checks should go here
-        // priority_map.insert(executable, priority);
-        priority_map[handle] = PriorityExecutable(handle, priority, t, sc);
-        priority_map[handle].chain_id = chain_index;
+        priority_map[handle] = std::make_shared<PriorityExecutable>(handle, priority, t, sc);
+        priority_map[handle]->chain_id = chain_index;
     }
 
     void set_executable_deadline(std::shared_ptr<const void> handle, int period, ExecutableType t, int chain_id = 0)
     {
         // TODO: any sanity checks should go here
-        // priority_map.insert(executable, priority);
-        priority_map[handle] = PriorityExecutable(handle, period, t, DEADLINE);
-        priority_map[handle].chain_id = chain_id;
+        priority_map[handle] = std::make_shared<PriorityExecutable>(handle, period, t, DEADLINE);
+        priority_map[handle]->chain_id = chain_id;
     }
 
     int get_priority(std::shared_ptr<const void> executable)
@@ -272,7 +278,7 @@ public:
         auto search = priority_map.find(executable);
         if (search != priority_map.end())
         {
-            return search->second.priority;
+            return search->second->priority;
         }
         else
         {
@@ -283,30 +289,29 @@ public:
 
     void set_first_in_chain(std::shared_ptr<const void> exec_handle)
     {
-        PriorityExecutable *settings = get_priority_settings(exec_handle);
-        settings->is_first_in_chain = true;
+        get_priority_settings(exec_handle)->is_first_in_chain = true;
     }
 
     void set_last_in_chain(std::shared_ptr<const void> exec_handle)
     {
-        PriorityExecutable *settings = get_priority_settings(exec_handle);
-        settings->is_last_in_chain = true;
+        get_priority_settings(exec_handle)->is_last_in_chain = true;
     }
 
     void assign_deadlines_queue(std::shared_ptr<const void> exec_handle, std::deque<uint64_t> *deadlines)
     {
-        PriorityExecutable *settings = get_priority_settings(exec_handle);
-        settings->deadlines = deadlines;
+        get_priority_settings(exec_handle)->deadlines = deadlines;
     }
 
 private:
-    PriorityExecutable *get_and_reset_priority(std::shared_ptr<const void> executable, ExecutableType t)
+    std::shared_ptr<PriorityExecutable> get_and_reset_priority(std::shared_ptr<const void> executable, ExecutableType t)
     {
-        PriorityExecutable *p = get_priority_settings(executable);
+        // PriorityExecutable *p = get_priority_settings(executable);
+        std::shared_ptr<PriorityExecutable> p = get_priority_settings(executable);
         if (p == nullptr)
         {
-            priority_map[executable] = PriorityExecutable(executable, 0, t);
-            p = &(priority_map[executable]);
+            // priority_map[executable] = PriorityExecutable(executable, 0, t);
+            priority_map[executable] = std::make_shared<PriorityExecutable>(executable, 0, t);
+            p = priority_map[executable];
         }
         // p->can_be_run = true;
         return p;
@@ -329,10 +334,16 @@ private:
     // TODO: evaluate using node/subscription namespaced strings as keys
 
     // holds *all* handle->priority mappings
-    std::unordered_map<std::shared_ptr<const void>, PriorityExecutable> priority_map;
+    std::map<std::shared_ptr<const void>, std::shared_ptr<PriorityExecutable>> priority_map;
 
     // hold *only valid* executable+priorities
-    std::priority_queue<const PriorityExecutable *, std::vector<const PriorityExecutable *>, PriorityExecutableComparator> all_executables_;
+    // std::priority_queue<const PriorityExecutable *, std::vector<const PriorityExecutable *>, PriorityExecutableComparator> all_executables_;
+    std::set<const PriorityExecutable *, PriorityExecutableComparator> all_executables_;
+
+    // priority queue doesn't allow iteration. fortunately, std::map is sorted by key, so we can replace the priority queue with a map
+    // the key will be the priority. the value doesn't matter.
+    // std::map<const PriorityExecutable *, int, PriorityExecutableComparator> all_executables_ = std::map<const PriorityExecutable *, int, PriorityExecutableComparator>(PriorityExecutableComparator());
+    void add_executable_to_queue(std::shared_ptr<PriorityExecutable> p);
 };
 
 #endif // RCLCPP__STRATEGIES__ALLOCATOR_MEMORY_STRATEGY_HPP_

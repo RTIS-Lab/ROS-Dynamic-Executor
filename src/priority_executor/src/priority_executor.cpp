@@ -20,6 +20,8 @@
 #include "rclcpp/exceptions.hpp"
 #include <memory>
 #include <sched.h>
+// for sleep
+#include <unistd.h>
 namespace timed_executor
 {
 
@@ -60,19 +62,17 @@ namespace timed_executor
     std::cout << "shutdown" << std::endl;
   }
 
-  unsigned long long TimedExecutor::get_max_runtime(void)
-  {
-    return maxRuntime;
-  }
-
   bool TimedExecutor::get_next_executable(rclcpp::AnyExecutable &any_executable, std::chrono::nanoseconds timeout)
   {
     bool success = false;
     // Check to see if there are any subscriptions or timers needing service
     // TODO(wjwwood): improve run to run efficiency of this function
-    sched_yield();
-    wait_for_work(std::chrono::milliseconds(1));
+    // sched_yield();
+    // sleep for 10us
+    // usleep(20);
+    wait_for_work(timeout);
     success = get_next_ready_executable(any_executable);
+    // std::cout << "get_next_executable: " << success << std::endl;
     return success;
   }
 

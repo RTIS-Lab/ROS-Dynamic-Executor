@@ -63,21 +63,17 @@ namespace timed_executor
     RCLCPP_PUBLIC
     void
     spin() override;
-    unsigned long long get_max_runtime(void);
     std::string name;
 
     void set_use_priorities(bool use_prio);
     std::shared_ptr<PriorityMemoryStrategy<>> prio_memory_strategy_ = nullptr;
 
-  private:
-    RCLCPP_DISABLE_COPY(TimedExecutor)
-    // TODO: remove these
-    unsigned long long maxRuntime = 0;
-    unsigned long long start_time = 0;
-    int recording = 0;
-    void execute_subscription(rclcpp::AnyExecutable subscription);
+  protected:
     bool
     get_next_executable(rclcpp::AnyExecutable &any_executable, std::chrono::nanoseconds timeout = std::chrono::nanoseconds(-1));
+
+  private:
+    RCLCPP_DISABLE_COPY(TimedExecutor)
     void
     wait_for_work(std::chrono::nanoseconds timeout);
 
@@ -89,44 +85,4 @@ namespace timed_executor
 
 } // namespace timed_executor
 
-static void
-take_and_do_error_handling(
-    const char *action_description,
-    const char *topic_or_service_name,
-    std::function<bool()> take_action,
-    std::function<void()> handle_action)
-{
-  bool taken = false;
-  try
-  {
-    taken = take_action();
-  }
-  catch (const rclcpp::exceptions::RCLError &rcl_error)
-  {
-    RCLCPP_ERROR(
-        rclcpp::get_logger("rclcpp"),
-        "executor %s '%s' unexpectedly failed: %s",
-        action_description,
-        topic_or_service_name,
-        rcl_error.what());
-  }
-  if (taken)
-  {
-    handle_action();
-  }
-  else
-  {
-    // Message or Service was not taken for some reason.
-    // Note that this can be normal, if the underlying middleware needs to
-    // interrupt wait spuriously it is allowed.
-    // So in that case the executor cannot tell the difference in a
-    // spurious wake up and an entity actually having data until trying
-    // to take the data.
-    RCLCPP_DEBUG(
-        rclcpp::get_logger("rclcpp"),
-        "executor %s '%s' failed to take anything",
-        action_description,
-        topic_or_service_name);
-  }
-}
 #endif // RCLCPP__EXECUTORS__SINGLE_THREADED_EXECUTOR_HPP_

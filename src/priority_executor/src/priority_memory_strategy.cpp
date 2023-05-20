@@ -1,9 +1,12 @@
 #include "priority_executor/priority_memory_strategy.hpp"
 #include "simple_timer/rt-sched.hpp"
 #include <sstream>
+size_t PriorityExecutable::num_executables;
 
 PriorityExecutable::PriorityExecutable(std::shared_ptr<const void> h, int p, ExecutableType t, ExecutableScheduleType sched_type)
 {
+    std::cout << "priority_executable constructor called" << std::endl;
+    std::cout << "type: " << t << std::endl;
     handle = h;
     type = t;
     if (sched_type == CHAIN_INDEPENDENT_PRIORITY || sched_type == CHAIN_AWARE_PRIORITY)
@@ -15,6 +18,9 @@ PriorityExecutable::PriorityExecutable(std::shared_ptr<const void> h, int p, Exe
         period = p;
     }
     this->sched_type = sched_type;
+
+    this->executable_id = num_executables;
+    num_executables += 1;
 }
 
 PriorityExecutable::PriorityExecutable()
@@ -32,14 +38,7 @@ void PriorityExecutable::dont_run()
 
 void PriorityExecutable::allow_run()
 {
-    if (this->can_be_run)
-    {
-        // release has been detected
-    }
-    else
-    {
-        this->can_be_run = true;
-    }
+    this->can_be_run = true;
 }
 
 void PriorityExecutable::increment_counter()
@@ -47,53 +46,58 @@ void PriorityExecutable::increment_counter()
     this->counter += 1;
 }
 
+bool PriorityExecutable::operator==(const PriorityExecutable &other) const
+{
+    std::cout << "PriorityExecutable::operator== called" << std::endl;
+    if (this->handle == other.handle)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 bool PriorityExecutableComparator::operator()(const PriorityExecutable *p1, const PriorityExecutable *p2)
 {
+    // since this will be used in a std::set, also check for equality
     if (p1 == nullptr || p2 == nullptr)
     {
         // TODO: realistic value
-        return 0;
+        std::cout << "PriorityExecutableComparator::operator() called with nullptr" << std::endl;
+        return false;
     }
+    if (p1->handle == p2->handle)
+    {
+        return false;
+    }
+    if (p1->executable_id == p2->executable_id)
+    {
+        return false;
+    }
+
     if (p1->sched_type != p2->sched_type)
     {
-        if (p1->sched_type == DEADLINE)
-        {
-            return false;
-        }
-        else if (p2->sched_type == DEADLINE)
-        {
-            return true;
-        }
-        if (p1->sched_type == CHAIN_INDEPENDENT_PRIORITY)
-        {
-            return false;
-        }
-        else if (p2->sched_type == CHAIN_INDEPENDENT_PRIORITY)
-        {
-            return true;
-        }
-        else if (p1->sched_type == CHAIN_AWARE_PRIORITY)
-        {
-            return false;
-        }
-        else
-        {
-            return true;
-        }
+        // in order: DEADLINE, CHAIN_AWARE, CHAIN_INDEPENDENT
+        return p1->sched_type < p2->sched_type;
     }
     if (p1->sched_type == CHAIN_INDEPENDENT_PRIORITY)
     {
+        if (p1->priority == p2->priority)
+        {
+            return p1->executable_id < p2->executable_id;
+        }
         // lower value runs first
-        return p1->priority > p2->priority;
+        return p1->priority < p2->priority;
     }
     if (p1->sched_type == CHAIN_AWARE_PRIORITY)
     {
-        if (p1->priority != p2->priority)
+        if (p1->priority == p2->priority)
         {
-            return p1->priority > p2->priority;
+            return p1->executable_id < p2->executable_id;
         }
-        // return p1->counter > p2->counter;
-        return 0;
+        return p1->priority < p2->priority;
     }
     if (p1->sched_type == DEADLINE)
     {
@@ -109,26 +113,27 @@ bool PriorityExecutableComparator::operator()(const PriorityExecutable *p1, cons
         {
             p2_deadline = p2->deadlines->front();
         }
+        if (p1_deadline == p2_deadline)
+        {
+            // this looks bad and is bad, BUT
+            // if we tell std::set these are equal, only one will be added, and we will lose the other.
+            // we need _something_ to make them unique
+            return p1->executable_id < p2->executable_id;
+        }
         if (p1_deadline == 0)
         {
-            return true;
+            p1_deadline = std::numeric_limits<uint64_t>::max();
         }
         if (p2_deadline == 0)
         {
-            return false;
+            p2_deadline = std::numeric_limits<uint64_t>::max();
         }
-        if (p1_deadline == p2_deadline)
-        {
-            // these must be from the same chain
-            // settle the difference with the counter
-            return p1->counter > p2->counter;
-        }
-        return p1_deadline > p2_deadline;
+        return p1_deadline < p2_deadline;
     }
     else
     {
         std::cout << "invalid compare opration on priority_exec" << std::endl;
-        return 0;
+        return false;
     }
 }
 
@@ -159,6 +164,15 @@ void PriorityMemoryStrategy<>::remove_guard_condition(const rcl_guard_condition_
 }
 
 template <>
+void PriorityMemoryStrategy<>::add_executable_to_queue(std::shared_ptr<PriorityExecutable> e)
+{
+    // e may have changed. remove and re-add
+    all_executables_.erase(e.get());
+    // convert from shared_ptr to raw pointer
+    all_executables_.insert(e.get());
+}
+
+template <>
 void PriorityMemoryStrategy<>::clear_handles()
 {
     subscription_handles_.clear();
@@ -167,14 +181,9 @@ void PriorityMemoryStrategy<>::clear_handles()
     timer_handles_.clear();
     waitable_handles_.clear();
 
-    // priority_queue doesn't have a clear function, so we swap it with an empty one. `empty` will go out of scope, and be cleared
     // all_executables_ = std::priority_queue<const PriorityExecutable *, std::vector<const PriorityExecutable *>, PriorityExecutableComparator>();
-    std::priority_queue<const PriorityExecutable *, std::vector<const PriorityExecutable *>, PriorityExecutableComparator> empty;
-    std::swap(all_executables_, empty);
-    if (!all_executables_.empty())
-    {
-        std::cout << "couldn't clear all exec" << std::endl;
-    }
+    // all_executables_.clear();
+    // all_executables_ = std::map<const PriorityExecutable *, int, PriorityExecutableComparator>(PriorityExecutableComparator());
 }
 
 template <>
@@ -190,60 +199,60 @@ void PriorityMemoryStrategy<>::remove_null_handles(rcl_wait_set_t *wait_set)
     {
         if (!wait_set->subscriptions[i])
         {
-            priority_map[subscription_handles_[i]].dont_run();
+            priority_map[subscription_handles_[i]]->dont_run();
             subscription_handles_[i].reset();
         }
         else
         {
-            priority_map[subscription_handles_[i]].allow_run();
+            priority_map[subscription_handles_[i]]->allow_run();
         }
     }
     for (size_t i = 0; i < service_handles_.size(); ++i)
     {
         if (!wait_set->services[i])
         {
-            priority_map[service_handles_[i]].dont_run();
+            priority_map[service_handles_[i]]->dont_run();
             service_handles_[i].reset();
         }
         else
         {
-            priority_map[service_handles_[i]].allow_run();
+            priority_map[service_handles_[i]]->allow_run();
         }
     }
     for (size_t i = 0; i < client_handles_.size(); ++i)
     {
         if (!wait_set->clients[i])
         {
-            priority_map[client_handles_[i]].dont_run();
+            priority_map[client_handles_[i]]->dont_run();
             client_handles_[i].reset();
         }
         else
         {
-            priority_map[client_handles_[i]].allow_run();
+            priority_map[client_handles_[i]]->allow_run();
         }
     }
     for (size_t i = 0; i < timer_handles_.size(); ++i)
     {
         if (!wait_set->timers[i])
         {
-            priority_map[timer_handles_[i]].dont_run();
+            priority_map[timer_handles_[i]]->dont_run();
             timer_handles_[i].reset();
         }
         else
         {
-            priority_map[timer_handles_[i]].allow_run();
+            priority_map[timer_handles_[i]]->allow_run();
         }
     }
     for (size_t i = 0; i < waitable_handles_.size(); ++i)
     {
         if (!waitable_handles_[i]->is_ready(wait_set))
         {
-            priority_map[waitable_handles_[i]].dont_run();
+            priority_map[waitable_handles_[i]]->dont_run();
             waitable_handles_[i].reset();
         }
         else
         {
-            priority_map[waitable_handles_[i]].allow_run();
+            priority_map[waitable_handles_[i]]->allow_run();
         }
     }
 
@@ -293,35 +302,34 @@ bool PriorityMemoryStrategy<>::collect_entities(const WeakNodeList &weak_nodes)
                 {
                     auto subscription_handle = subscription->get_subscription_handle();
                     subscription_handles_.push_back(subscription_handle);
-                    all_executables_.push(get_and_reset_priority(subscription_handle, SUBSCRIPTION));
-
+                    add_executable_to_queue(get_and_reset_priority(subscription_handle, SUBSCRIPTION));
                     return false;
                 });
             group->find_service_ptrs_if(
                 [this](const rclcpp::ServiceBase::SharedPtr &service)
                 {
-                    all_executables_.push(get_and_reset_priority(service->get_service_handle(), SERVICE));
+                    add_executable_to_queue(get_and_reset_priority(service->get_service_handle(), SERVICE));
                     service_handles_.push_back(service->get_service_handle());
                     return false;
                 });
             group->find_client_ptrs_if(
                 [this](const rclcpp::ClientBase::SharedPtr &client)
                 {
-                    all_executables_.push(get_and_reset_priority(client->get_client_handle(), CLIENT));
+                    add_executable_to_queue(get_and_reset_priority(client->get_client_handle(), CLIENT));
                     client_handles_.push_back(client->get_client_handle());
                     return false;
                 });
             group->find_timer_ptrs_if(
                 [this](const rclcpp::TimerBase::SharedPtr &timer)
                 {
-                    all_executables_.push(get_and_reset_priority(timer->get_timer_handle(), TIMER));
+                    add_executable_to_queue(get_and_reset_priority(timer->get_timer_handle(), TIMER));
                     timer_handles_.push_back(timer->get_timer_handle());
                     return false;
                 });
             group->find_waitable_ptrs_if(
                 [this](const rclcpp::Waitable::SharedPtr &waitable)
                 {
-                    all_executables_.push(get_and_reset_priority(waitable, WAITABLE));
+                    add_executable_to_queue(get_and_reset_priority(waitable, WAITABLE));
                     waitable_handles_.push_back(waitable);
                     return false;
                 });
@@ -420,10 +428,17 @@ void PriorityMemoryStrategy<>::get_next_executable(
 {
 
     const PriorityExecutable *next_exec = nullptr;
-    while (!all_executables_.empty())
+    // std::cout << "all_executables_.size():" << all_executables_.size() << std::endl;
+    // print all_executables_
+    // for (auto exec : all_executables_)
+    // {
+    //     std::cout << exec << ": " << exec->handle << " : " << exec->sched_type << std::endl;
+    // }
+
+    // while (!all_executables_.empty())
+    for (auto exec : all_executables_)
     {
-        next_exec = all_executables_.top();
-        all_executables_.pop();
+        next_exec = exec;
         if (!next_exec->can_be_run)
         {
             continue;
@@ -571,22 +586,26 @@ void PriorityMemoryStrategy<>::get_next_executable(
         }
         break;
         default:
-            // std::cout << "Unknown type from priority!!!" << std::endl;
-            break;
+            std::cout << "Unknown type from priority!!!" << std::endl;
+            continue;
+            // break;
         }
         if (next_exec->is_first_in_chain && next_exec->sched_type == DEADLINE)
         {
             // std::cout << "running first in chain deadline" << std::endl;
         }
+        // returning with an executable
+        // remove from all_executables_ map
+        all_executables_.erase(exec);
         return;
     }
 }
 
 template <>
-void PriorityMemoryStrategy<>::post_execute(rclcpp::AnyExecutable any_exec)
+void PriorityMemoryStrategy<>::post_execute(rclcpp::AnyExecutable any_exec, int thread_id)
 {
 
-    PriorityExecutable *next_exec = nullptr;
+    std::shared_ptr<PriorityExecutable> next_exec = nullptr;
     if (any_exec.subscription)
     {
         next_exec = get_priority_settings(any_exec.subscription->get_subscription_handle());
@@ -660,7 +679,7 @@ void PriorityMemoryStrategy<>::post_execute(rclcpp::AnyExecutable any_exec)
         int64_t time_diff = millis - this_deadline;
         int periods_late;
         // if time_diff is negative, we completed on time. add one period to the deadline
-        if (time_diff < 0)
+        if (time_diff <= 0)
         {
             periods_late = 0;
             next_deadline = this_deadline + next_exec->period;
@@ -670,7 +689,7 @@ void PriorityMemoryStrategy<>::post_execute(rclcpp::AnyExecutable any_exec)
         else
         {
             periods_late = std::ceil(time_diff / (double)next_exec->period);
-            next_deadline = this_deadline + (periods_late + 1) * next_exec->period;
+            next_deadline = this_deadline + (periods_late)*next_exec->period;
             on_time = false;
         }
         // std::chrono::nanoseconds time_until = next_exec->timer_handle->time_until_trigger();
@@ -678,9 +697,19 @@ void PriorityMemoryStrategy<>::post_execute(rclcpp::AnyExecutable any_exec)
         // the next deadline is the current time plus the period, skipping periods that have already passed
 
         // RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "next deadline: %d", next_deadline);
-        oss << "{\"operation\": \"next_deadline\", \"chain_id\": " << next_exec->chain_id << ", \"deadline\": " << next_deadline << ", \"on_time\": " << on_time << ", \"time_diff\": " << time_diff << ", \"periods_late\": " << periods_late << "}";
+        oss << "{\"operation\": \"next_deadline\", \"chain_id\": " << next_exec->chain_id << ", \"deadline\": " << next_deadline << ", \"on_time\": " << on_time << ", \"time_diff\": " << time_diff << ", \"periods_late\": " << periods_late;
+        if (thread_id != -1)
+        {
+            oss << ", \"thread_id\": " << thread_id;
+        }
+
+        oss << "}";
         // oss << "{\"operation\": \"next_deadline\", \"chain_id\": " << next_exec->chain_id << ", \"deadline\": " << next_exec->deadlines->front() << "}";
         log_entry(logger_, oss.str());
+        if (time_diff < -next_exec->period)
+        {
+            // the deadline was much later than it needed to be
+        }
         next_exec->deadlines->push_back(next_deadline);
 
         // print chain id and deadline contents
@@ -699,7 +728,7 @@ void PriorityMemoryStrategy<>::post_execute(rclcpp::AnyExecutable any_exec)
         // this is safe, since we popped it earlier
         // get a mutable reference
         // TODO: find a cleaner way to do this
-        PriorityExecutable *mut_executable = get_priority_settings(next_exec->handle);
+        std::shared_ptr<PriorityExecutable> mut_executable = get_priority_settings(next_exec->handle);
         // std::cout << "running chain aware cb" << std::endl;
         mut_executable->increment_counter();
     }
