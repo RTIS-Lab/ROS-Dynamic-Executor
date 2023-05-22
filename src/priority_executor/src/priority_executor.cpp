@@ -49,7 +49,7 @@ namespace timed_executor
       // size_t ready = memory_strategy_->number_of_ready_subscriptions();
       // std::cout << "ready:" << ready << std::endl;
 
-      if (get_next_executable(any_executable))
+      if (get_next_executable(any_executable, std::chrono::nanoseconds(-1)))
       {
         execute_any_executable(any_executable);
         // make sure memory_strategy_ is an instance of PriorityMemoryStrategy

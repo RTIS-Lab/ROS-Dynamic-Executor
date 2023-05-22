@@ -27,7 +27,7 @@ namespace timed_executor
                               std::shared_ptr<rclcpp::detail::MutexTwoPriorities>>
         wait_mutex_set_;
     static std::mutex shared_wait_mutex_;
-    std::chrono::nanoseconds next_exec_timeout_ = std::chrono::microseconds(100); // 0.1 ms
+    std::chrono::nanoseconds next_exec_timeout_ = std::chrono::nanoseconds(-1);
   };
 }
 
