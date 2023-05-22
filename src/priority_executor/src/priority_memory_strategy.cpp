@@ -293,7 +293,8 @@ bool PriorityMemoryStrategy<>::collect_entities(const WeakNodeList &weak_nodes)
         for (auto &weak_group : node->get_callback_groups())
         {
             auto group = weak_group.lock();
-            if (!group || !group->can_be_taken_from().load())
+            if (!group)
+            // if (!group || !group->can_be_taken_from().load())
             {
                 continue;
             }
@@ -429,11 +430,21 @@ void PriorityMemoryStrategy<>::get_next_executable(
 
     const PriorityExecutable *next_exec = nullptr;
     // std::cout << "all_executables_.size():" << all_executables_.size() << std::endl;
-    // print all_executables_
-    // for (auto exec : all_executables_)
-    // {
-    //     std::cout << exec << ": " << exec->handle << " : " << exec->sched_type << std::endl;
-    // }
+    // log contents of all_executables_
+    // std::cout << exec->name << ": " << exec->handle << " : " << exec->sched_type << std::endl;
+    std::ostringstream oss;
+    oss << "{\"operation\":\"get_next_executable\"";
+    // output names and handles of all_executables_ in json array
+    oss << ",\"all_executables\":[";
+    for (auto exec : all_executables_)
+    {
+        // if (exec->can_be_run)
+        oss << "{\"name\":\"" << exec->name << "\", \"sched_type\":\"" << exec->sched_type << "\", \"can_be_run\":\"" << exec->can_be_run << "\"},";
+    }
+    // remove trailing comma
+    oss.seekp(-1, oss.cur);
+    oss << "]}";
+    log_entry(logger_, oss.str());
 
     // while (!all_executables_.empty())
     for (auto exec : all_executables_)
@@ -596,7 +607,9 @@ void PriorityMemoryStrategy<>::get_next_executable(
         }
         // returning with an executable
         // remove from all_executables_ map
-        all_executables_.erase(exec);
+        all_executables_.erase(next_exec);
+        std::ostringstream oss;
+        oss << "{\"operation\": \"select_task\", \"task\": \"" << exec->name << "\"}";
         return;
     }
 }

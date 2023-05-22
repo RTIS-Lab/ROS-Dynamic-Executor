@@ -95,6 +95,8 @@ public:
 
     static size_t num_executables;
     int executable_id = 0;
+
+    std::string name = "";
 };
 
 class PriorityExecutableComparator
@@ -266,11 +268,12 @@ public:
         priority_map[handle]->chain_id = chain_index;
     }
 
-    void set_executable_deadline(std::shared_ptr<const void> handle, int period, ExecutableType t, int chain_id = 0)
+    void set_executable_deadline(std::shared_ptr<const void> handle, int period, ExecutableType t, int chain_id = 0, std::string name = "")
     {
         // TODO: any sanity checks should go here
         priority_map[handle] = std::make_shared<PriorityExecutable>(handle, period, t, DEADLINE);
         priority_map[handle]->chain_id = chain_id;
+        priority_map[handle]->name = name;
     }
 
     int get_priority(std::shared_ptr<const void> executable)
