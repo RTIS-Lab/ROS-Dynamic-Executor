@@ -50,6 +50,18 @@ ament_target_dependencies(multithread_priority_executor
   simple_timer
 )
 
+add_library(default_executor src/default_executor.cpp)
+target_include_directories(default_executor PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(default_executor
+  rmw
+  rclcpp
+  rcl
+  simple_timer
+)
+
 add_executable(usage_example src/usage_example.cpp)
 target_include_directories(usage_example PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -72,7 +84,7 @@ install(TARGETS usage_example
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(TARGETS priority_executor multithread_priority_executor
+install(TARGETS priority_executor multithread_priority_executor default_executor
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
@@ -92,4 +104,5 @@ endif()
 ament_export_include_directories(include)
 ament_export_libraries(priority_executor)
 ament_export_libraries(multithread_priority_executor)
+ament_export_libraries(default_executor)
 ament_package()
