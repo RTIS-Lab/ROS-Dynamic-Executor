@@ -14,6 +14,7 @@ namespace timed_executor
         wait_mutex_set_[this] = std::make_shared<rclcpp::detail::MutexTwoPriorities>();
         number_of_threads_ = number_of_threads;
         next_exec_timeout_ = next_exec_timeout;
+        logger_ = create_logger();
     }
 
     size_t MultithreadTimedExecutor::get_number_of_threads()

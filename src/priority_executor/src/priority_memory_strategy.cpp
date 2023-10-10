@@ -627,15 +627,15 @@ void PriorityMemoryStrategy<>::get_next_executable(
         // returning with an executable
         // remove from all_executables_ map
         all_executables_.erase(next_exec);
-        std::stringstream oss;
-        oss << "{\"operation\":\"get_next_executable\", \"result\":\"success\", \"type\":\"" << type << "\"}";
-        log_entry(logger_, oss.str());
+        // std::stringstream oss;
+        // oss << "{\"operation\":\"get_next_executable\", \"result\":\"success\", \"type\":\"" << type << "\"}";
+        // log_entry(logger_, oss.str());
         return;
     }
     // nothing found
-    std::stringstream oss;
-    oss << "{\"operation\":\"get_next_executable\", \"result\":\"nothing_found\"}";
-    log_entry(logger_, oss.str());
+    // std::stringstream oss;
+    // oss << "{\"operation\":\"get_next_executable\", \"result\":\"nothing_found\"}";
+    // log_entry(logger_, oss.str());
 }
 
 template <>

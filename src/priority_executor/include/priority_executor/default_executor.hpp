@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <memory>
 #include <vector>
+#include <set>
 
 #include "rclcpp/executor.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -30,33 +31,38 @@
 #include "rclcpp/utilities.hpp"
 #include "rclcpp/rate.hpp"
 #include "rclcpp/visibility_control.hpp"
+#include "rclcpp/detail/mutex_two_priorities.hpp"
 #include "priority_executor/priority_memory_strategy.hpp"
 #include "simple_timer/rt-sched.hpp"
 
 class RTISTimed
 {
 public:
-  node_time_logger logger_ = create_logger();
+  node_time_logger logger_;
 };
 
-class ROSDefaultMultithreadedExecutor : public rclcpp::executors::MultiThreadedExecutor, public RTISTimed
+class ROSDefaultMultithreadedExecutor : public rclcpp::Executor, public RTISTimed
 {
 public:
-  RCLCPP_SMART_PTR_DEFINITIONS(ROSDefaultMultithreadedExecutor)
-
-  /// Default constructor. See the default constructor for Executor.
-  RCLCPP_PUBLIC explicit ROSDefaultMultithreadedExecutor(
-      const rclcpp::ExecutorOptions &options = rclcpp::ExecutorOptions(),
-      size_t number_of_threads = 0,
-      bool yield_before_execute = false,
-      std::chrono::nanoseconds timeout = std::chrono::nanoseconds(-1)) : rclcpp::executors::MultiThreadedExecutor(options, number_of_threads, yield_before_execute, timeout){};
-
-  /// Default destructor.
   RCLCPP_PUBLIC
-  virtual ~ROSDefaultMultithreadedExecutor();
+  explicit ROSDefaultMultithreadedExecutor(
+      const rclcpp::ExecutorOptions &options = rclcpp::ExecutorOptions(), int number_of_threads = 2, std::chrono::nanoseconds next_exec_timeout = std::chrono::nanoseconds(-1));
 
-  RCLCPP_PUBLIC
+  RCLCPP_PUBLIC size_t get_number_of_threads();
+  RCLCPP_PUBLIC void spin() override;
   bool get_next_executable(rclcpp::AnyExecutable &any_executable, std::chrono::nanoseconds timeout = std::chrono::nanoseconds(-1));
+
+protected:
+  RCLCPP_PUBLIC void run(size_t thread_number);
+
+private:
+  size_t number_of_threads_;
+  std::set<rclcpp::TimerBase::SharedPtr> scheduled_timers_;
+  static std::unordered_map<ROSDefaultMultithreadedExecutor *,
+                            std::shared_ptr<rclcpp::detail::MutexTwoPriorities>>
+      wait_mutex_set_;
+  static std::mutex shared_wait_mutex_;
+  std::chrono::nanoseconds next_exec_timeout_ = std::chrono::nanoseconds(-1);
 };
 
 /// Single-threaded executor implementation.

@@ -29,6 +29,7 @@ namespace timed_executor
       : rclcpp::Executor(options)
   {
     this->name = name;
+    logger_ = create_logger();
   }
 
   TimedExecutor::~TimedExecutor() {}
@@ -70,9 +71,21 @@ namespace timed_executor
     // sched_yield();
     // sleep for 10us
     // usleep(20);
+    auto start = std::chrono::steady_clock::now();
     wait_for_work(timeout);
+    auto end = std::chrono::steady_clock::now();
+    auto wait_duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::ostringstream oss;
+    oss << "{\"operation\": \"wait_for_work\", \"wait_duration\": " << wait_duration.count() << "}";
+    log_entry(logger_, oss.str());
+
+    start = std::chrono::steady_clock::now();
     success = get_next_ready_executable(any_executable);
-    // std::cout << "get_next_executable: " << success << std::endl;
+    end = std::chrono::steady_clock::now();
+    auto get_next_duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    oss.str("");
+    oss << "{\"operation\": \"get_next_executable\", \"duration\": " << get_next_duration.count() << ", \"result\": " << success << "}";
+    log_entry(logger_, oss.str());
     return success;
   }
 

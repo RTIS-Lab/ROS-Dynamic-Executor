@@ -31,6 +31,7 @@
 #include "rclcpp/rate.hpp"
 #include "rclcpp/visibility_control.hpp"
 #include "priority_executor/priority_memory_strategy.hpp"
+#include <priority_executor/default_executor.hpp>
 namespace timed_executor
 {
 
@@ -38,7 +39,7 @@ namespace timed_executor
   /**
  * This is the default executor created by rclcpp::spin.
  */
-  class TimedExecutor : public rclcpp::Executor
+  class TimedExecutor : public rclcpp::Executor, public RTISTimed
   {
   public:
     RCLCPP_SMART_PTR_DEFINITIONS(TimedExecutor)
