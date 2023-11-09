@@ -113,12 +113,14 @@ bool PriorityExecutableComparator::operator()(const PriorityExecutable *p1, cons
         {
             p2_deadline = p2->deadlines->front();
         }
-        if (p1_deadline == p2_deadline)
+        if (p1_deadline == p2_deadline || p1->deadlines == p2->deadlines)
         {
             // this looks bad and is bad, BUT
             // if we tell std::set these are equal, only one will be added, and we will lose the other.
             // we need _something_ to make them unique
-            return p1->executable_id < p2->executable_id;
+            // since we'd rather finish a chain than start a new one, select the higher id
+            // return p1->executable_id > p2->executable_id;
+            return p1->priority < p2->priority;
         }
         if (p1_deadline == 0)
         {
