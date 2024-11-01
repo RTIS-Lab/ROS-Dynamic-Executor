@@ -17,7 +17,6 @@
 #include "rclcpp/any_executable.hpp"
 #include "rclcpp/scope_exit.hpp"
 #include "rclcpp/utilities.hpp"
-#include "rclcpp/exceptions.hpp"
 #include <memory>
 #include <sched.h>
 // for sleep

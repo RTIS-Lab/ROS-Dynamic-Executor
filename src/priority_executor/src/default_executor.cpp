@@ -210,8 +210,7 @@ void ROSDefaultMultithreadedExecutor::spin()
   }
 }
 
-void ROSDefaultMultithreadedExecutor::run(size_t thread_number)
-{
+void ROSDefaultMultithreadedExecutor::run(__attribute__((unused)) size_t _thread_number) {
   while (rclcpp::ok(this->context_) && spinning.load())
   {
     rclcpp::AnyExecutable any_exec;
