@@ -20,19 +20,12 @@
 #include <cassert>
 #include <cstdlib>
 #include <memory>
-#include <vector>
 #include <set>
 
 #include "rclcpp/executor.hpp"
-#include "rclcpp/rclcpp.hpp"
 #include "rclcpp/macros.hpp"
-#include "rclcpp/memory_strategies.hpp"
-#include "rclcpp/node.hpp"
-#include "rclcpp/utilities.hpp"
-#include "rclcpp/rate.hpp"
 #include "rclcpp/visibility_control.hpp"
 #include "rclcpp/detail/mutex_two_priorities.hpp"
-#include "priority_executor/priority_memory_strategy.hpp"
 #include "simple_timer/rt-sched.hpp"
 
 class RTISTimed
