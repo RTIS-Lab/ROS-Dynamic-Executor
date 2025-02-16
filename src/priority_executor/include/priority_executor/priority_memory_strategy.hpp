@@ -17,20 +17,14 @@
 
 #include <memory>
 #include <vector>
-#include <queue>
 #include <time.h>
 #include <set>
+#include <deque>
 
 #include "rcl/allocator.h"
 
 #include "rclcpp/allocator/allocator_common.hpp"
 #include "rclcpp/memory_strategy.hpp"
-#include "rclcpp/node.hpp"
-#include "rclcpp/visibility_control.hpp"
-
-#include "rcutils/logging_macros.h"
-
-#include "rmw/types.h"
 
 #include "simple_timer/rt-sched.hpp"
 

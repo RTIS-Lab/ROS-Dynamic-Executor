@@ -20,15 +20,9 @@
 #include <cassert>
 #include <cstdlib>
 #include <memory>
-#include <vector>
-#include <time.h>
 
 #include "rclcpp/executor.hpp"
 #include "rclcpp/macros.hpp"
-#include "rclcpp/memory_strategies.hpp"
-#include "rclcpp/node.hpp"
-#include "rclcpp/utilities.hpp"
-#include "rclcpp/rate.hpp"
 #include "rclcpp/visibility_control.hpp"
 #include "priority_executor/priority_memory_strategy.hpp"
 #include <priority_executor/default_executor.hpp>
