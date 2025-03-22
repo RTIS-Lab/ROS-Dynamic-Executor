@@ -1,1 +1,1 @@
-This contains the priority_executor package that adds an Executor with deadline and chain-aware priority support.
+This contains the priority_executor package that adds an Executor with deadline and chain-aware priority support. The `usage_example.cpp` file shows the needed steps to use the executor.

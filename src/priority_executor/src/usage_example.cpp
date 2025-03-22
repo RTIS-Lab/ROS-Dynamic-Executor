@@ -64,26 +64,30 @@ int main(int argc, char **argv)
   auto strategy = std::make_shared<PriorityMemoryStrategy<>>();
   options.memory_strategy = strategy;
   auto executor = new timed_executor::TimedExecutor(options);
-  // replace the above line with the following line to use the default executor
-  // which will intermix the execution of listener1 and listener2
-  // auto executor =
-  // std::make_shared<rclcpp::executors::SingleThreadedExecutor>(options);
 
+
+  // the new funcitons in PriorityMemoryStrategy accept the handle of the
+  // timer/subscription as the first argument
   strategy->set_executable_deadline(talker->timer_->get_timer_handle(), 1000,
-                                    TIMER);
+                                    TIMER, 0);
+  // you _must_ set the timer_handle for each chain
   strategy->get_priority_settings(talker->timer_->get_timer_handle())
       ->timer_handle = talker->timer_;
+  // you _must_ mark the first executable in the chain
   strategy->set_first_in_chain(talker->timer_->get_timer_handle());
-  strategy->get_priority_settings(talker->timer_->get_timer_handle());
+  // set the same period and chain_id for each callback in the chain
   strategy->set_executable_deadline(listener1->sub_->get_subscription_handle(),
-                                    1000, SUBSCRIPTION);
+                                    1000, SUBSCRIPTION, 0);
   strategy->set_executable_deadline(listener2->sub_->get_subscription_handle(),
-                                    1000, SUBSCRIPTION);
+                                    1000, SUBSCRIPTION, 0);
+  // you _must_ mark the last executable in the chain (used to keep track of different instances of the same chain)
   strategy->set_last_in_chain(listener2->sub_->get_subscription_handle());
+  // add all the nodes to the executor
   executor->add_node(talker);
   executor->add_node(listener1);
   executor->add_node(listener2);
 
+  // if the executor behaves unexpectedly, you can print the priority settings to make sure they are correct
   std::cout << *strategy->get_priority_settings(
                    talker->timer_->get_timer_handle())
             << std::endl;
