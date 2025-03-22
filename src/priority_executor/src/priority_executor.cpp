@@ -59,7 +59,7 @@ namespace timed_executor
         }
       }
     }
-    std::cout << "shutdown" << std::endl;
+    RCLCPP_INFO(rclcpp::get_logger("priority_executor"), "priority executor shutdown");
   }
 
   bool TimedExecutor::get_next_executable(rclcpp::AnyExecutable &any_executable, std::chrono::nanoseconds timeout)
