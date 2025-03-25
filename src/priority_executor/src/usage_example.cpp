@@ -65,6 +65,9 @@ int main(int argc, char **argv)
   options.memory_strategy = strategy;
   auto executor = new timed_executor::TimedExecutor(options);
 
+  // must be set to post_execute can set new deadlines
+  executor->prio_memory_strategy_ = strategy;
+
 
   // the new funcitons in PriorityMemoryStrategy accept the handle of the
   // timer/subscription as the first argument
